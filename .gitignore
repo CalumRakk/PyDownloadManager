@@ -17,3 +17,4 @@ dist/
 *.ico
 concatenate/
 concatevideo.py
+test.py
