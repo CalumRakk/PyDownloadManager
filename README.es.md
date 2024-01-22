@@ -7,6 +7,14 @@ Las principales funcionalidades son:
 - [ ] Evitar que la descarga se corrompa si hay una desconexión accidental.
 - [ ] Establecer un limite de velocidad a la descarga
 
+## Instalación
+
+Abre el shell del sistema y ejecuta el siguiente comando:
+
+```shell
+pip install git+https://github.com/CalumRakk/urlDownloader
+```
+
 ## Ejemplo
 
 El siguiente código descarga un archivo y lo guarda en la ubicación donde se ejecute el script
