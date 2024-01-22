@@ -25,8 +25,9 @@ class urlDownloader:
 
     def download(self):
         manager = ThreadManager(**self.__dict__)
-        result = manager.multi_threaded_download()
-        combine_files(result, self.dest)
+        results, folder_temp = manager.multi_threaded_download()
+        combine_files(results, self.dest)
+        folder_temp.rmdir()
 
 
 class ThreadManager(urlDownloader):
@@ -36,25 +37,23 @@ class ThreadManager(urlDownloader):
         filesize = int(response.headers["Content-Length"])
         return filesize
 
-    def _download_chunk(self, url: str, chunk, resultados, index):
+    def _download_chunk(self, url: str, chunk, resultados, index, path):
         inicio = chunk[0]
         fin = chunk[1]
         headers = {"Range": f"bytes={inicio}-{fin}"}
         count = 0
-        path_new = self.dest.with_name(f"{self.dest}-{index}" + self.dest.suffix)
         block_sz = 16384
-        with open(path_new, "wb") as archivo:
+        with open(path, "wb") as archivo:
             response = requests.get(url, headers=headers, stream=True)
             while True:
                 for chunk in response.iter_content(chunk_size=block_sz):
                     if chunk:
                         count += len(chunk)
                         archivo.write(chunk)
-                        print(f"Wrote {count} bytes.")
                 break
-        return resultados.put((response.status_code, path_new))
+        return resultados.put((index, response.status_code, path))
 
-    def multi_threaded_download(self) -> Queue[tuple[int, Path]]:
+    def multi_threaded_download(self) -> tuple[Queue[tuple[int, int, Path]], Path]:
         filesize = self._get_filesize(self.url)
         chunks = calcular_chunk_size(
             filesize=filesize,
@@ -63,10 +62,15 @@ class ThreadManager(urlDownloader):
         )
         resultados = Queue()
         threads = []
-        for i in range(0, self.threads_count):
+        folder = self.dest.parent / "temp"
+        folder.mkdir(exist_ok=True)
+        for index in range(0, self.threads_count):
+            name = self.dest.with_name(f"{self.dest.stem}-{index}")
+            filename = name.with_suffix(self.dest.suffix)
+            path = folder / filename
             thread = threading.Thread(
                 target=self._download_chunk,
-                args=(self.url, chunks[i], resultados, i),
+                args=(self.url, chunks[index], resultados, index, path),
             )
             threads.append(thread)
             thread.start()
@@ -74,4 +78,4 @@ class ThreadManager(urlDownloader):
         for thread in threads:
             thread.join()
 
-        return resultados
+        return resultados, folder

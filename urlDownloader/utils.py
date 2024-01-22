@@ -9,14 +9,16 @@ headers = {
 
 
 def calcular_chunk_size(
-    filesize, threads_count: int, minChunkFile
+    filesize,
+    threads_count: int,
+    minChunkFile,
 ) -> list[tuple[int, int]]:
     if ceil(filesize / threads_count) < minChunkFile:
         threads_count = 1
     chunks = []
     pos = 0
     chunk = ceil(filesize / threads_count)
-    for i in range(threads_count):
+    for index in range(threads_count):
         startByte = pos
         endByte = pos + chunk
         if endByte > filesize - 1:
@@ -27,13 +29,18 @@ def calcular_chunk_size(
     return chunks
 
 
-def combine_files(results: Queue[tuple[int, Path]], dest):
+def combine_files(results: Queue[tuple[int, int, Path]], dest):
     chunkSize = 1024 * 1024 * 20
-    first_part: Path = results.get()[1]
+    files = []
+    while not results.empty():
+        result = results.get()
+        files.append(result)
+
+    files_sorted = sorted(files, key=lambda x: x[0])
+    first_part: Path = files_sorted.pop(0)[2]
     with open(first_part, "ab") as output:
-        while not results.empty():
-            result = results.get()
-            path: Path = result[1]
+        for file in files_sorted:
+            path: Path = file[2]
             with open(path, "rb") as input:
                 data = input.read(chunkSize)
                 while data:
