@@ -1,7 +1,7 @@
 import requests
 from queue import Queue
 import threading
-from .utils import headers, calcular_chunk_size, combine_files
+from .utils import HEADERS, calcular_chunk_size, combine_files
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -11,7 +11,7 @@ class urlDownloader:
         self,
         url,
         dest: Path = None,
-        headers=headers,
+        headers=None,
         threads_count: int = 3,
         minChunkFile=None,
     ):
@@ -19,7 +19,7 @@ class urlDownloader:
         if type(dest) is str:
             dest = Path(dest)
         self.dest = dest or Path(Path(urlparse(url).path).name)
-        self.headers = headers
+        self.headers = headers or HEADERS
         self.threads_count = threads_count
         self.minChunkFile = minChunkFile or 1024 * 1024 * 10  # 10MB
 
