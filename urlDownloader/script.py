@@ -98,7 +98,8 @@ class ThreadManager(urlDownloader):
         self._threads = []
         self._folder = self.dest.parent / "temp"
         self._folder.mkdir(exist_ok=True)
-        for index in range(0, self.threads_count):
+
+        for index in range(0, len(chunks)):
             name = self.dest.with_name(f"{self.dest.stem}-{index}")
             filename = name.with_suffix(self.dest.suffix)
             path = self._folder / filename
