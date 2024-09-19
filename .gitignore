@@ -18,3 +18,4 @@ dist/
 concatenate/
 concatevideo.py
 test.py
+*.egg-info
