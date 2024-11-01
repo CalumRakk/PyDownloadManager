@@ -15,6 +15,6 @@ setup(
     readme="README.md",
     author="Leo",
     url="https://github.com/CalumRakk/urlDownloader",
-    install_requires=["requests"],
+    install_requires=["requests", "tqdm"],
     packages=find_packages(),
 )
