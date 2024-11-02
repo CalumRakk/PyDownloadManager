@@ -1,50 +1,15 @@
-import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
-from tqdm import tqdm
 import time
 
+import requests
+from tqdm import tqdm
 
-def get_folder_temp(folder_temp):
-    # Devuelve un directorio temporal.
-    # Si folder_temp es None, se devuelve un directorio temporal en el sistema temporal.
-    # Si folder_temp es un archivo, se devuelve el directorio padre del archivo.
-    if isinstance(folder_temp, str):
-        folder_temp = Path(folder_temp)
-    elif folder_temp is None:
-        return Path()
-
-    if folder_temp.suffix:
-        return folder_temp.parent
-    return folder_temp
+from .utils import get_folder_temp, get_output, move_file
 
 
-def get_output(output, url):
-    if isinstance(output, str):
-        output = Path(output)
-    elif output is None:
-        filename = Path(urlparse(url).path).name
-        return Path(filename)
-
-    if output.suffix:
-        return output
-
-    filename = Path(urlparse(url).path).name
-    return output / filename
-
-
-def move_file(source: Path, dest: Path):
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    if source.drive != dest.drive:
-        temp_filename = dest.with_suffix(".temp")
-        temp_path = dest.parent / temp_filename
-        source.rename(temp_path)
-        return temp_path.rename(dest)
-    return source.rename(dest)
-
-
-class PyDownloader:
+class PyDM:
     def __init__(
         self,
         url,
@@ -172,16 +137,16 @@ class PyDownloader:
                         f.write(data)
                         data = f2.read(buffer_size)
                 chunk_file.unlink()
-        try:
-            temp_path.rename(path)
-        except PermissionError:
-            time.sleep(5)
-            temp_path.rename(path)
-        return path
+
+        while True:
+            try:
+                temp_path.rename(path)
+                return path
+            except PermissionError:
+                time.sleep(2)
 
 
 if __name__ == "__main__":
-    # url = "https://ftp.nluug.nl/pub/graphics/blender/demo/movies/Sintel.2010.1080p.mkv"
     url = "https://www.peach.themazzone.com/durian/movies/sintel-2048-surround.mp4"
-    downloader = PyDownloader(url, output=r"D:\temp")
+    downloader = PyDM(url, output=r"D:\temp")
     downloader.download()

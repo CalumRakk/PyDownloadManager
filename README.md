@@ -1,28 +1,23 @@
-urlDownloader is a simple download manager for Python.
+# PyDownloadManager (PyDM)
 
-Key features include:
+PyDownloadManager (**PyDM**) es un simple acelerador de descargas escrito en Python diseñado para mejorar la velocidad de descarga en conexiones lentas. Permite descargar archivos en múltiples partes simultáneamente.
 
-- [x] Download files on slow connections.
-- [x] Download acceleration by splitting a file into parts and downloading them simultaneously to increase download speed.
-- [ ] Prevent the download from being corrupted if there is an accidental disconnection.
-- [ ] Set a download speed limit.
+## Instalación
 
-## Installing
-
-Open the system shell and run the following command:
+Abra el shell del sistema y ejecute el siguiente comando:
 
 ```shell
-pip install git+https://github.com/CalumRakk/urlDownloader
+pip install git+https://github.com/CalumRakk/PyDownloadManager.git
 ```
 
-## Example
+## Ejemplo
 
-The following code downloads a file and saves it in the location where the script is executed:
+El siguiente ejemplo muestra cómo descargar un archivo desde una URL y guardarlo en el directorio especificado (output) al finalizar la descarga:
 
 ```python
-from urlDownloader import urlDownloader
+from pydm import PyDM
 
-url = "https://v3.cdnpk.net/videvo_files/video/free/2018-09/originalContent/180824_TheEarth_36.mp4"
-urlDL = urlDownloader(url)
-urlDL.download()
+url = "https://www.peach.themazzone.com/durian/movies/sintel-2048-surround.mp4"
+downloader = PyDM(url, output=r"D:\temp")
+downloader.download()
 ```
