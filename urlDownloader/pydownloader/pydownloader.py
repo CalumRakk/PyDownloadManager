@@ -3,43 +3,111 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 from tqdm import tqdm
+import time
+
+
+def get_folder_temp(folder_temp):
+    # Devuelve un directorio temporal.
+    # Si folder_temp es None, se devuelve un directorio temporal en el sistema temporal.
+    # Si folder_temp es un archivo, se devuelve el directorio padre del archivo.
+    if isinstance(folder_temp, str):
+        folder_temp = Path(folder_temp)
+    elif folder_temp is None:
+        return Path()
+
+    if folder_temp.suffix:
+        return folder_temp.parent
+    return folder_temp
+
+
+def get_output(output, url):
+    if isinstance(output, str):
+        output = Path(output)
+    elif output is None:
+        filename = Path(urlparse(url).path).name
+        return Path(filename)
+
+    if output.suffix:
+        return output
+
+    filename = Path(urlparse(url).path).name
+    return output / filename
+
+
+def move_file(source: Path, dest: Path):
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if source.drive != dest.drive:
+        temp_filename = dest.with_suffix(".temp")
+        temp_path = dest.parent / temp_filename
+        source.rename(temp_path)
+        return temp_path.rename(dest)
+    return source.rename(dest)
 
 
 class PyDownloader:
     def __init__(
         self,
         url,
-        dest=None,
+        output=None,
         folder_temp=None,
         threads_count=3,
         min_chunk_size=10 * 1024 * 1024,
     ):
         self.url = url
-        self.dest = dest or Path(Path(urlparse(url).path).name)
+        self.output = output
         self.threads_count = threads_count
         self.min_chunk_size = min_chunk_size
 
-        self.folder_temp = Path(folder_temp) if folder_temp else folder_temp
-        self.progress_bar = None
+        self.__folder_temp = folder_temp
 
-        # Comprueba que la ruta de destino no tenga un punto de extensión.
-        if self.folder_temp:
-            if self.folder_temp.suffix:
-                self.folder_temp = self.folder_temp.parent
-            self.folder_temp.mkdir(parents=True, exist_ok=True)
-            self.original_dest = self.dest
-            self.dest = self.folder_temp / self.dest.name
+    @property
+    def content_length(self):
+        # El tamaño del archivo se obtiene de la respuesta HEAD.
+        if hasattr(self, "_content_length"):
+            return getattr(self, "_content_length")
 
-        if Path(self.dest).exists():
-            raise FileExistsError(f"File {self.dest} already exists")
+        response = requests.head(self.url)
+        response.raise_for_status()
+        content_length = int(response.headers.get("Content-Length", 0))
+        setattr(self, "_content_length", content_length)
+        return content_length
+
+    @property
+    def progress_bar(self):
+        if hasattr(self, "_progress_bar"):
+            return getattr(self, "_progress_bar")
+
+        progress_bar = tqdm(
+            total=self.content_length, unit="B", unit_scale=True, desc="Downloading"
+        )
+        setattr(self, "_progress_bar", progress_bar)
+        return progress_bar
+
+    @property
+    def folder_temp(self):
+        if hasattr(self, "_folder_temp"):
+            return getattr(self, "_folder_temp")
+
+        folder_temp = get_folder_temp(self.__folder_temp)
+        folder_temp.mkdir(parents=True, exist_ok=True)
+        setattr(self, "_folder_temp", folder_temp)
+        return folder_temp
 
     def download(self):
-        filesize = self._get_filesize()
-        chunks = self._calculate_chunks(filesize)
-        self.progress_bar = tqdm(
-            total=filesize, unit="B", unit_scale=True, desc="Downloading"
-        )
+        dest = get_output(self.output, self.url)
+        if dest.exists():
+            raise FileExistsError(f"{dest} already exists")
 
+        source_temp = get_output(self.folder_temp, self.url)
+        if source_temp.exists():
+            return move_file(source_temp, dest)
+
+        chunks = self._calculate_chunks(self.content_length)
+        count_chunks = self._download_chunks(chunks)
+        source = self._combine_chunks(count_chunks)
+        return move_file(source, dest)
+
+    def _download_chunks(self, chunks) -> int:
         with ThreadPoolExecutor(max_workers=self.threads_count) as executor:
             futures = [
                 executor.submit(self._download_chunk, chunk, i)
@@ -50,12 +118,7 @@ class PyDownloader:
                 future.result()
 
         self.progress_bar.close()
-        self._combine_files(len(chunks))
-
-    def _get_filesize(self):
-        response = requests.head(self.url)
-        response.raise_for_status()
-        return int(response.headers.get("Content-Length", 0))
+        return len(chunks)
 
     def _calculate_chunks(self, total_size):
         """
@@ -80,39 +143,45 @@ class PyDownloader:
         return chunks
 
     def _download_chunk(self, chunk, index):
-        self.dest.parent.mkdir(parents=True, exist_ok=True)
+
         start, end = chunk
         headers = {"Range": f"bytes={start}-{end}"}
         response = requests.get(self.url, headers=headers, stream=True)
         response.raise_for_status()
 
-        chunk_file = Path(f"{self.dest}.part{index}")
-        with chunk_file.open("wb") as f:
+        filename = Path(urlparse(self.url).path).name + ".part" + str(index)
+        path = self.folder_temp / filename
+        with path.open("wb") as f:
             for data in response.iter_content(chunk_size=8192):
                 f.write(data)
                 self.progress_bar.update(len(data))
 
-        return chunk_file
+        return path
 
-    def _combine_files(self, num_chunks, buffer_size=1024 * 1024 * 50):
-        with Path(self.dest.with_suffix(".temp")).open("wb") as f:
+    def _combine_chunks(self, num_chunks: int, buffer_size=1024 * 1024 * 50):
+        filename = Path(urlparse(self.url).path).name
+        path = self.folder_temp / filename
+        temp_path = path.with_suffix(".combining")
+
+        with temp_path.open("wb") as f:
             for i in range(num_chunks):
-                chunk_file = Path(f"{self.dest}.part{i}")
+                chunk_file = Path(f"{path}.part{i}")
                 with chunk_file.open("rb") as f2:
                     data = f2.read(buffer_size)
                     while data:
                         f.write(data)
                         data = f2.read(buffer_size)
                 chunk_file.unlink()
-
-        if self.folder_temp:
-            self.original_dest.parent.mkdir(parents=True, exist_ok=True)
-            self.dest.rename(self.original_dest)
-
-        self.dest.with_suffix(".temp").rename(self.dest)
+        try:
+            temp_path.rename(path)
+        except PermissionError:
+            time.sleep(5)
+            temp_path.rename(path)
+        return path
 
 
 if __name__ == "__main__":
-    url = "https://ftp.nluug.nl/pub/graphics/blender/demo/movies/Sintel.2010.1080p.mkv"
-    downloader = PyDownloader(url, folder_temp="tmp")
+    # url = "https://ftp.nluug.nl/pub/graphics/blender/demo/movies/Sintel.2010.1080p.mkv"
+    url = "https://www.peach.themazzone.com/durian/movies/sintel-2048-surround.mp4"
+    downloader = PyDownloader(url, output=r"D:\temp")
     downloader.download()
