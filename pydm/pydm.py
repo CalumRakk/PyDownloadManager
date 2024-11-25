@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from urllib.parse import urlparse
 import time
-
+from typing import Union
 import requests
 from tqdm import tqdm
 
@@ -13,7 +13,7 @@ class PyDM:
     def __init__(
         self,
         url,
-        output=None,
+        output: Union[str, Path] = None,
         folder_temp=None,
         threads_count=3,
         min_chunk_size=10 * 1024 * 1024,
@@ -32,6 +32,8 @@ class PyDM:
             return getattr(self, "_content_length")
 
         response = requests.head(self.url)
+        if response.status_code == 403:
+            response = requests.get(self.url, stream=True)
         response.raise_for_status()
         content_length = int(response.headers.get("Content-Length", 0))
         setattr(self, "_content_length", content_length)
